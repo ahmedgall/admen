@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بوابة الشركاء - ليلتي ✨</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+    <style>
+        :root { --pink: #D2617C; --gold: #D4AF37; --bg: #f8f9fa; --dark: #333; --green: #27ae60; --red: #e74c3c; }
+        body { font-family: 'Tajawal', sans-serif; background: var(--bg); margin: 0; padding: 15px; direction: rtl; }
+        
+        /* شاشة الدخول */
+        .login-box { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; max-width: 400px; margin: 80px auto; }
+        .login-box h2 { color: var(--pink); margin-bottom: 20px; font-weight: 800; }
+        input { width: 100%; padding: 15px; margin: 10px 0; border: 1.5px solid #eee; border-radius: 12px; box-sizing: border-box; text-align: center; font-size: 18px; outline: none; }
+        input:focus { border-color: var(--pink); }
+        .btn-login { width: 100%; padding: 15px; background: var(--pink); color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        .btn-login:active { transform: scale(0.98); }
+
+        /* لوحة التحكم */
+        .dashboard { display: none; max-width: 600px; margin: 0 auto; }
+        .partner-header { background: white; padding: 20px; border-radius: 18px; box-shadow: 0 2px 15px rgba(0,0,0,0.05); margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid var(--gold); }
+        
+        .booking-card { background: white; border-radius: 15px; padding: 18px; margin-bottom: 15px; border-right: 6px solid var(--pink); box-shadow: 0 4px 10px rgba(0,0,0,0.04); position: relative; }
+        .booking-card h3 { margin: 0 0 12px 0; font-size: 17px; color: var(--pink); }
+        .booking-card p { margin: 6px 0; font-size: 14px; color: #555; line-height: 1.5; }
+        .booking-card b { color: var(--dark); }
+        
+        .status-badge { position: absolute; top: 15px; left: 15px; background: #e8f5e9; color: #2e7d32; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: bold; }
+        .btn-logout { background: #f1f1f1; padding: 8px 15px; border-radius: 10px; font-size: 13px; cursor: pointer; border: none; font-family: 'Tajawal'; font-weight: bold; color: #777; }
+
+        /* أزرار الإضافة الجديدة */
+        .btns-group { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px; }
+        .btn-action { flex: 1; padding: 12px; border: none; border-radius: 10px; font-family: 'Tajawal'; font-weight: bold; cursor: pointer; color: white; font-size: 13px; }
+        .btn-ok { background: var(--green); }
+        .btn-no { background: var(--red); }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="loginSection" class="login-box">
+        <div style="font-size: 40px; margin-bottom: 10px;">🤝</div>
+        <h2>بوابة الشركاء</h2>
+        <p style="font-size: 14px; color: #777;">أدخل كود النشاط (مثل: h01) لمتابعة حجوزاتك المؤكدة</p>
+        <input type="text" id="partnerCode" placeholder="كود الشريك">
+        <button class="btn-login" onclick="login()">دخول لوحة التحكم</button>
+    </div>
+
+    <div id="dashboardSection" class="dashboard">
+        <div class="partner-header">
+            <div>
+                <h2 id="welcomeMsg" style="margin:0; font-size:19px;">مرحباً بشريكنا ✨</h2>
+                <small id="partnerIdDisplay" style="color:#999; font-weight: bold;"></small>
+            </div>
+            <button class="btn-logout" onclick="location.reload()">تسجيل خروج</button>
+        </div>
+
+        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+            <div style="width: 4px; height: 20px; background: var(--gold); margin-left: 10px; border-radius: 2px;"></div>
+            <h3 style="font-size: 16px; color: #444; margin:0;">إدارة حجوزاتك</h3>
+        </div>
+
+        <div id="bookingsList"></div>
+    </div>
+
+    <script>
+        // 1. إعدادات Firebase
+        const firebaseConfig = { projectId: "gggg-4cab7" }; 
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // 2. دالة الدخول
+        function login() {
+            const code = document.getElementById('partnerCode').value.trim();
+            if(!code) { alert("برجاء إدخال كود الشريك"); return; }
+            
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'block';
+            document.getElementById('partnerIdDisplay').innerText = "كود النشاط: " + code;
+            
+            loadPartnerBookings(code);
+        }
+
+        // 3. جلب الحجوزات
+        function loadPartnerBookings(code) {
+            const listDiv = document.getElementById('bookingsList');
+            listDiv.innerHTML = '<p style="text-align:center; padding:20px; color:#999;">جاري تحديث البيانات...</p>';
+
+            // بنراقب الحجوزات
+            db.collection("confirmed_bookings")
+            .where("hallId", "==", code) 
+            .onSnapshot(snapshot => {
+                listDiv.innerHTML = '';
+                
+                if (snapshot.empty) {
+                    listDiv.innerHTML = `
+                        <div style="text-align:center; margin-top:50px; background:white; padding:30px; border-radius:20px;">
+                            <img src="https://cdn-icons-png.flaticon.com/512/4076/4076549.png" width="60" style="opacity:0.2;">
+                            <p style="color:#999; margin-top:15px;">لا توجد حجوزات لهذا الكود حالياً.</p>
+                        </div>`;
+                    return;
+                }
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const id = doc.id;
+                    const status = data.status || "مؤكد ✅";
+                    
+                    const card = document.createElement('div');
+                    card.className = 'booking-card';
+                    
+                    const confirmedDate = data.verifiedAt ? data.verifiedAt.toDate().toLocaleString('ar-EG') : 'الآن';
+
+                    // منطق إخفاء الأزرار لو تم اتخاذ قرار
+                    const isProcessed = status === "تم التأكيد نهائياً 🏁" || status === "مرفوض من الشريك ❌";
+
+                    card.innerHTML = `
+                        <span class="status-badge" style="background:${status.includes('مرفوض') ? '#fdeaea' : '#e8f5e9'}; color:${status.includes('مرفوض') ? '#c0392b' : '#2e7d32'}">${status}</span>
+                        <h3>حجز: ${data.customerPhone}</h3>
+                        <p>💸 العربون: <b>${data.amount || '0'} ج.م</b></p>
+                        <p>💳 من محفظة: <b>${data.transferFrom}</b></p>
+                        <hr style="border:0; border-top:1px solid #eee; margin:10px 0;">
+                        <p style="font-size:11px; color:#aaa;">تاريخ التأكيد: ${confirmedDate}</p>
+                        
+                        <div class="btns-group ${isProcessed ? 'hidden' : ''}">
+                            <button class="btn-action btn-ok" onclick="updatePartnerStatus('${id}', 'تم التأكيد نهائياً 🏁')">تأكيد الحجز</button>
+                            <button class="btn-action btn-no" onclick="updatePartnerStatus('${id}', 'مرفوض من الشريك ❌')">رفض الحجز</button>
+                        </div>
+                    `;
+                    listDiv.appendChild(card);
+                    
+                    if(data.hallName) {
+                        document.getElementById('welcomeMsg').innerText = "مرحباً: " + data.hallName;
+                    }
+                });
+            });
+        }
+
+        // دالة تحديث الحالة الجديدة
+        async function updatePartnerStatus(docId, newStatus) {
+            if(!confirm("هل أنت متأكد من " + (newStatus.includes('مرفوض') ? 'رفض' : 'تأكيد') + " هذا الحجز؟")) return;
+            try {
+                await db.collection("confirmed_bookings").doc(docId).update({
+                    status: newStatus,
+                    partnerActionAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (e) {
+                alert("حدث خطأ: " + e.message);
+            }
+        }
+    </script>
+</body> 
+</html>
